@@ -40,6 +40,7 @@ DEFAULT_EXCLUDED_TOP_LEVEL_DIRS = {
     "TResultParser",
     "backup_before_split",
     "backup_phase_a",
+    "frontend",
     "my_lin_gateway_251118_bakup",
     "report",
     "reports",
@@ -58,6 +59,7 @@ IGNORED_PATH_SEGMENTS = {
     ".pytest_cache",
     ".codex_tmp",
 }
+ACTIVE_FRONTEND_PREFIXES = ("frontend-v2/",)
 
 
 @dataclass
@@ -198,6 +200,11 @@ def summarize_diff_stats(numstats: list[dict[str, Any]]) -> dict[str, Any]:
 
 def changed_markdown_docs(paths: list[str]) -> list[str]:
     return [path for path in paths if path.lower().endswith(".md")]
+
+
+def is_frontend_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    return normalized.startswith(ACTIVE_FRONTEND_PREFIXES)
 
 
 def is_relevant_path(path: str) -> bool:
@@ -411,7 +418,7 @@ def infer_work_type(changed_files: list[str], commits: list[Commit], profile_nam
     test_hits = sum(1 for path in normalized_paths if path.startswith("tests/") or "/test_" in path or path.endswith("_test.py"))
     docs_hits = sum(1 for path in normalized_paths if path.endswith(".md") or path.startswith("docs/") or path.startswith("project_docs/"))
     backend_hits = sum(1 for path in normalized_paths if path.startswith("backend/"))
-    frontend_hits = sum(1 for path in normalized_paths if path.startswith("frontend/"))
+    frontend_hits = sum(1 for path in normalized_paths if is_frontend_path(path))
     app_hits = sum(
         1
         for path in normalized_paths
@@ -515,7 +522,7 @@ def infer_change_facets(changed_files: list[str], commits: list[Commit], diff_su
         add("버그수정", "커밋 메시지에 수정 또는 오류 대응 표현이 포함되었습니다.")
     if any(word in text for word in ("refactor", "cleanup", "restructure", "architecture", "구조", "리팩터")):
         add("구조개선", "커밋 메시지에 구조 정리 또는 리팩터링 표현이 포함되었습니다.")
-    if any(path.startswith("frontend/") for path in all_paths) or any(word in text for word in ("ui", "ux", "screen", "layout")):
+    if any(is_frontend_path(path) for path in all_paths) or any(word in text for word in ("ui", "ux", "screen", "layout")):
         add("UI", "프론트엔드 경로 또는 화면 관련 변경이 감지되었습니다.")
     if any(path.startswith("backend/") or "/api/" in path for path in all_paths) or any(word in text for word in ("api", "endpoint", "server")):
         add("API", "백엔드 또는 API 관련 경로가 변경되었습니다.")

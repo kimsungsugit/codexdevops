@@ -422,7 +422,11 @@ def stop_run(req: StopRequest) -> Dict[str, Any]:
             _write_json(path, data)
         except Exception:
             pass
-    return {"ok": True}
+    return {
+        "ok": True,
+        "status": "stopped",
+        "message": "stop request processed",
+    }
 
 
 @router.get("/api/reports/local/summary")
@@ -436,4 +440,3 @@ def local_report_summary() -> Dict[str, Any]:
         return {"reports": summaries, "comparisons": comparisons}
 
     return cached_response("local_report_summary", _compute, ttl=30.0)
-
