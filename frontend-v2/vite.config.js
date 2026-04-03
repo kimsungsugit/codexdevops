@@ -8,17 +8,23 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
   },
+  test: {
+    environment: 'happy-dom',
+    setupFiles: ['./vitest.setup.js'],
+    globals: true,
+    css: true,
+  },
   server: {
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:7000',
         changeOrigin: true,
         timeout: 600000,
         proxyTimeout: 600000,
       },
       '/download': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:7000',
         changeOrigin: true,
       },
     },

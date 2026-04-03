@@ -25,21 +25,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable, Tuple
 
-# [Google Gemini SDK Import]
 try:
-    # New SDK (recommended): pip install google-genai
+    # Supported Gemini SDK: pip install google-genai
     from google import genai as genai_new  # type: ignore
 except Exception:  # pragma: no cover
     genai_new = None  # type: ignore
-
-try:
-    # Legacy SDK (deprecated): pip install google-generativeai
-    import google.generativeai as genai_legacy  # type: ignore
-    from google.generativeai.types import HarmCategory, HarmBlockThreshold  # type: ignore
-except Exception:  # pragma: no cover
-    genai_legacy = None  # type: ignore
-    HarmCategory = None  # type: ignore
-    HarmBlockThreshold = None  # type: ignore
 
 try:
     import requests  # type: ignore
@@ -719,11 +709,6 @@ def llm_call(
         # 1-a) New SDK (google-genai)
         if genai_new is not None:
             last_err = ""
-            allow_legacy_after_network_denied = str(
-                cfg.get("legacy_fallback_on_network_denied")
-                or os.environ.get("GEMINI_LEGACY_FALLBACK_ON_NETWORK_DENIED")
-                or "0"
-            ).strip().lower() in ("1", "true", "yes")
             fallback_model = (
                 cfg.get("fallback_model")
                 or os.environ.get("LLM_FALLBACK_MODEL")
@@ -791,9 +776,7 @@ def llm_call(
                             meta_out["sdk"] = "google-genai"
                             meta_out["error"] = "network_denied"
                             meta_out["new_sdk_error"] = last_err
-                        if not allow_legacy_after_network_denied:
-                            return None
-                        break
+                        return None
                     lower_err = last_err.lower()
                     is_bad_request = ("400" in lower_err) or ("invalid_argument" in lower_err)
                     if is_bad_request and fallback_model:

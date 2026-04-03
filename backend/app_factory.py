@@ -75,8 +75,8 @@ def register_startup(app: FastAPI, logger: logging.Logger) -> None:
 
         logger.info("=" * 50)
         logger.info("DevOps Release Server started")
-        logger.info("  Local:   http://127.0.0.1:8000")
-        logger.info("  Network: http://%s:8000", ip)
+        logger.info("  Local:   http://127.0.0.1:7000")
+        logger.info("  Network: http://%s:7000", ip)
         logger.info("=" * 50)
 
         from backend.database import init_db

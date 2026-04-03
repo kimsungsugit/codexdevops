@@ -3,7 +3,7 @@
 Current runtime:
 
 - Backend: `backend` FastAPI app on port `7000`
-- Frontend: `frontend-v2` Vite/React app on port `5173`
+- Frontend: `frontend-v2` Vite/React app on port `5174`
 - Legacy `frontend/` has been removed from the active code path
 
 ## Active Structure
@@ -28,7 +28,8 @@ tests/
 
 ## Backend
 
-Create a virtual environment and install dependencies:
+Create a virtual environment and install dependencies.
+Recommended: Windows CPython `3.12` using a standard venv. Python `3.13` on MSYS2/MinGW may fail to install some binary packages used by this repo.
 
 ```powershell
 python -m venv .venv
@@ -61,6 +62,18 @@ npm run build
 
 ## Tests
 
+Quick local smoke checks:
+
+```powershell
+bash .git/hooks/pre-commit
+```
+
+Full validation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_full_checks.ps1
+```
+
 Backend unit and integration tests:
 
 ```powershell
@@ -77,9 +90,8 @@ npm test -- --run
 E2E tests require Playwright plus both servers running:
 
 ```powershell
-cd frontend-v2
-npx playwright install chromium
-cd ..
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
 python -m pytest tests/e2e -q --tb=short
 ```
 
@@ -89,3 +101,5 @@ python -m pytest tests/e2e -q --tb=short
 - Router registration is centralized in `backend/router_registry.py`.
 - Static frontend mounting is handled by `backend/frontend_mount.py`.
 - Report classification and periodic summaries treat `frontend-v2` as the only active frontend.
+- The Vite dev server runs on `5174` and proxies backend requests to `127.0.0.1:7000`.
+- The pre-commit hook is intentionally a smoke gate, not a full regression suite.
