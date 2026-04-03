@@ -1,10 +1,15 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$python = Join-Path $repoRoot "backend\.venv\Scripts\python.exe"
+$pythonCandidates = @(
+    (Join-Path $repoRoot ".venv\Scripts\python.exe"),
+    (Join-Path $repoRoot "backend\.venv\Scripts\python.exe"),
+    (Join-Path $repoRoot "output\verify-venv312\Scripts\python.exe")
+)
+$python = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 
-if (-not (Test-Path $python)) {
-    throw "backend\.venv\Scripts\python.exe not found. Create the CPython 3.12 venv first."
+if (-not $python) {
+    throw "No supported Python runtime found. Create the root .venv with CPython 3.12 first."
 }
 
 Write-Host "== Backend unit + integration =="
@@ -26,6 +31,11 @@ finally {
 }
 
 Write-Host "== E2E tests =="
+& $python -c "import playwright"
+if ($LASTEXITCODE -ne 0) {
+    throw "Playwright is not installed in the selected Python environment. Run 'python -m pip install -r requirements.txt'."
+}
+
 $frontendJob = Start-Job -ScriptBlock {
     param($frontendPath)
     Set-Location $frontendPath
@@ -62,7 +72,15 @@ try {
 
     $env:E2E_BASE_URL = "http://127.0.0.1:5174"
     $env:E2E_BACKEND_URL = "http://127.0.0.1:7000"
-    & $python -m pytest tests/e2e -q --tb=short
+    $e2eOutput = @(& $python -m pytest tests/e2e -q --tb=short 2>&1)
+    $e2eExit = $LASTEXITCODE
+    $e2eOutput | ForEach-Object { Write-Host $_ }
+    if ($e2eExit -ne 0) {
+        throw "E2E tests failed."
+    }
+    if (($e2eOutput -join "`n") -match "skipped") {
+        throw "E2E tests were skipped. Install Playwright browsers and rerun full validation."
+    }
 }
 finally {
     Stop-Job $frontendJob, $backendJob -ErrorAction SilentlyContinue | Out-Null

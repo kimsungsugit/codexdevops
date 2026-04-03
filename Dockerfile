@@ -1,5 +1,5 @@
 # Dockerfile (clang-19 preferred, fallback to clang-18)
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     TZ=Asia/Seoul \
@@ -120,7 +120,16 @@ RUN set -eux; \
 # 5. Copy Source Code
 COPY . /app
 
-EXPOSE 8000
+EXPOSE 7000
 
-# 6. Run Application
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 6. Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# 7. Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7000/api/health')" || exit 1
+
+# 8. Run Application
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7000"]

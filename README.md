@@ -37,6 +37,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+Standard local environment:
+
+- Python: Windows CPython `3.12`
+- Virtual environment: repository root `.venv`
+- `backend/.venv` is legacy compatibility only and should not be used for new setup
+
 Run the API:
 
 ```powershell
@@ -65,12 +71,15 @@ npm run build
 Quick local smoke checks:
 
 ```powershell
-bash .git/hooks/pre-commit
+git config core.hooksPath .githooks
+bash .githooks/pre-commit
 ```
 
 Full validation:
 
 ```powershell
+git config core.hooksPath .githooks
+python -m playwright install chromium
 powershell -ExecutionPolicy Bypass -File .\scripts\run_full_checks.ps1
 ```
 
@@ -102,4 +111,8 @@ python -m pytest tests/e2e -q --tb=short
 - Static frontend mounting is handled by `backend/frontend_mount.py`.
 - Report classification and periodic summaries treat `frontend-v2` as the only active frontend.
 - The Vite dev server runs on `5174` and proxies backend requests to `127.0.0.1:7000`.
+- The backend API runtime and Docker container use port `7000`.
+- `requirements.txt` is the umbrella install for local development and CI.
+- The tracked git hook lives in `.githooks/pre-commit`; run `git config core.hooksPath .githooks` once per clone.
+- Docker runtime verification is handled in CI. If Docker is installed locally, validate with `docker build` and `docker run -p 7000:7000`.
 - The pre-commit hook is intentionally a smoke gate, not a full regression suite.

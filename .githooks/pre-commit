@@ -1,0 +1,69 @@
+#!/bin/bash
+# Pre-commit hook: quick smoke checks for local commits.
+
+set -e
+
+echo "=== Pre-commit Hook: Release_claude ==="
+
+PYTHON_BIN=""
+for candidate in \
+    ".venv/Scripts/python.exe" \
+    "backend/.venv/Scripts/python.exe" \
+    "output/verify-venv312/Scripts/python.exe"
+do
+    if [ -x "$candidate" ]; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    PYTHON_BIN=$(command -v python || true)
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "Python runtime not found for pre-commit hook."
+    exit 1
+fi
+
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+if [ -n "$STAGED_PY" ]; then
+    echo "[1/2] Checking Python syntax..."
+    for f in $STAGED_PY; do
+        if [ -f "$f" ]; then
+            "$PYTHON_BIN" -m py_compile "$f" || {
+                echo "Syntax error in $f"
+                exit 1
+            }
+        fi
+    done
+    echo "Python syntax OK"
+else
+    echo "[1/2] No Python files staged, skipping syntax check"
+fi
+
+set +e
+if [ -d "tests/unit" ]; then
+    echo "[2/2] Running smoke tests (timeout: 60s)..."
+    TEST_OUTPUT=$(timeout 60 "$PYTHON_BIN" -m pytest \
+        tests/unit/test_app_factory.py \
+        tests/unit/test_generate_periodic_reports.py \
+        tests/unit/test_export_suts_vectorcast.py \
+        tests/unit/test_routers.py \
+        -x -q --tb=short 2>&1)
+    TEST_EXIT=$?
+    echo "$TEST_OUTPUT" | tail -20
+    if [ $TEST_EXIT -eq 124 ]; then
+        echo "Smoke tests timed out (60s). Commit allowed, run full checks manually."
+    elif [ $TEST_EXIT -ne 0 ]; then
+        echo "Smoke tests failed. Commit aborted."
+        exit 1
+    else
+        echo "Smoke tests passed"
+    fi
+else
+    echo "[2/2] No unit test directory found, skipping smoke tests"
+fi
+set -e
+
+echo "=== Pre-commit checks passed ==="
