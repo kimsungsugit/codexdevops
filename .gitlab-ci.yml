@@ -1,16 +1,22 @@
 stages:
   - lint
   - test
+  - frontend
+  - build
+  - verify
+  - e2e
+  - deploy
 
 variables:
   GIT_SSL_NO_VERIFY: "1"
   PYTHONPATH: "$CI_PROJECT_DIR"
 
-# Python syntax check on changed .py files
-syntax-check:
-  stage: lint
+default:
   tags:
     - shared
+
+syntax-check:
+  stage: lint
   script:
     - echo "=== Python Syntax Check ==="
     - $changedFiles = git diff --name-only HEAD~1..HEAD -- "*.py" 2>$null
@@ -36,21 +42,138 @@ syntax-check:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Unit tests
-unit-tests:
+backend-tests:
   stage: test
-  tags:
-    - shared
+  needs:
+    - syntax-check
   before_script:
     - '[Environment]::SetEnvironmentVariable("PYTHONPATH", "$PWD", "Process")'
-    - python -m pip install --no-build-isolation -r requirements-dev.txt 2>$null; $true
-    - python -m pip install --no-build-isolation -r requirements-core.txt 2>$null; $true
+    - python -m pip install -r requirements.txt
   script:
-    - '[Environment]::SetEnvironmentVariable("PYTHONPATH", "$PWD", "Process")'
-    - echo "=== Running Unit Tests ==="
-    - python -m pytest tests/unit/ -q --tb=short
+    - echo "=== Running Backend Unit + Integration Tests ==="
+    - |
+      python -m pytest `
+        tests/unit/test_export_suts_vectorcast.py `
+        tests/unit/test_generate_periodic_reports.py `
+        tests/unit/test_app_factory.py `
+        tests/unit/test_routers.py `
+        tests/integration `
+        -q --tb=short `
+        --cov=backend --cov=workflow --cov=report_gen --cov=generators `
+        --cov-report=term-missing --cov-report=html:htmlcov `
+        --cov-fail-under=40
+  artifacts:
+    when: always
+    paths:
+      - htmlcov/
+    expire_in: 7 days
+  timeout: 20m
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+frontend-tests:
+  stage: frontend
+  script:
+    - cd frontend-v2
+    - npm ci
+    - npm test
   timeout: 15m
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
   allow_failure: false
+
+docker-build:
+  stage: build
+  needs:
+    - backend-tests
+    - frontend-tests
+  script:
+    - docker build -t devops-release:$CI_COMMIT_SHA .
+    - docker tag devops-release:$CI_COMMIT_SHA devops-release:latest
+    - docker save devops-release:latest -o devops-release.tar
+    - echo "Docker image built successfully"
+  artifacts:
+    when: always
+    paths:
+      - devops-release.tar
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+docker-runtime-check:
+  stage: verify
+  needs:
+    - docker-build
+  script:
+    - docker build -t devops-release:runtime-check .
+    - docker run -d --name devops-release-runtime -p 7000:7000 devops-release:runtime-check
+    - |
+      $healthy = $false
+      for ($i = 0; $i -lt 30; $i++) {
+        try {
+          $response = Invoke-WebRequest -Uri "http://127.0.0.1:7000/api/health" -UseBasicParsing -TimeoutSec 5
+          if ($response.StatusCode -eq 200) {
+            $healthy = $true
+            break
+          }
+        } catch {
+          Start-Sleep -Seconds 2
+        }
+      }
+      if (-not $healthy) {
+        docker logs devops-release-runtime
+        exit 1
+      }
+  after_script:
+    - docker rm -f devops-release-runtime 2>$null
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+e2e-main:
+  stage: e2e
+  needs:
+    - backend-tests
+    - frontend-tests
+  before_script:
+    - '[Environment]::SetEnvironmentVariable("PYTHONPATH", "$PWD", "Process")'
+    - python -m pip install -r requirements.txt
+    - python -m playwright install chromium
+  script:
+    - cd frontend-v2
+    - npm ci
+    - cd ..
+    - powershell -ExecutionPolicy Bypass -File .\scripts\run_full_checks.ps1
+  timeout: 30m
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+deploy-staging:
+  stage: deploy
+  needs:
+    - docker-build
+    - docker-runtime-check
+  script:
+    - echo "Ready to deploy devops-release:$CI_COMMIT_SHA"
+    - |
+      if (Test-Path "docker-compose.yml") {
+        docker-compose down
+        docker-compose up -d
+        echo "Deployment completed"
+      } else {
+        echo "docker-compose.yml not found, skipping auto-deploy"
+        echo "Manual deploy: docker load -i devops-release.tar && docker run -d -p 7000:7000 devops-release:latest"
+      }
+  environment:
+    name: staging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: true

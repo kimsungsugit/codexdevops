@@ -68,6 +68,21 @@ npm run build
 
 ## Tests
 
+Stabilization baseline:
+
+- Branch: `codex/runtime-cleanup-stabilization`
+- For release validation or CI debugging, prefer a fresh clone or a new git worktree instead of a dirty working tree with unrelated edits
+
+Recommended bootstrap for a new clone or worktree:
+
+```powershell
+git config core.hooksPath .githooks
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
 Quick local smoke checks:
 
 ```powershell
@@ -116,3 +131,4 @@ python -m pytest tests/e2e -q --tb=short
 - The tracked git hook lives in `.githooks/pre-commit`; run `git config core.hooksPath .githooks` once per clone.
 - Docker runtime verification is handled in CI. If Docker is installed locally, validate with `docker build` and `docker run -p 7000:7000`.
 - The pre-commit hook is intentionally a smoke gate, not a full regression suite.
+- Git remotes must not embed tokens or passwords in the URL. Use a credential helper or interactive PAT flow instead.
