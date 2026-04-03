@@ -47,3 +47,14 @@ OAI_CONFIG_LIST
 *.png
 *.jpg
 *.jpeg
+
+# workspace cleanup
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+frontend-v2/node_modules/
+frontend-v2/dist/
+frontend-v2/.vite/
+**/bin/
+**/obj/
