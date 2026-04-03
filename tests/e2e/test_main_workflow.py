@@ -22,11 +22,21 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not HAS_PLAYWRIGHT, reason="playwright not installed")
 
-BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:5173")
+BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:5174")
+BACKEND_URL = os.environ.get("E2E_BACKEND_URL", "http://localhost:7000")
+
+
+def bootstrap_user(page) -> None:
+    """Seed the lightweight local user gate so app chrome can render."""
+    page.add_init_script(
+        """
+        window.localStorage.setItem('devops_v2_user', 'e2e_user');
+        """
+    )
 
 
 @pytest.fixture(scope="module")
-def browser_context(browser_type_launch_args):
+def browser_context():
     """Provide a shared browser context for the module."""
     try:
         from playwright.sync_api import sync_playwright
@@ -47,6 +57,7 @@ class TestAppLoads:
     @pytest.fixture(autouse=True)
     def _setup(self, browser_context):
         self.page = browser_context.new_page()
+        bootstrap_user(self.page)
         yield
         self.page.close()
 
@@ -75,6 +86,7 @@ class TestNavigationTabs:
     @pytest.fixture(autouse=True)
     def _setup(self, browser_context):
         self.page = browser_context.new_page()
+        bootstrap_user(self.page)
         self.page.goto(BASE_URL, timeout=15000)
         self.page.wait_for_load_state("domcontentloaded")
         yield
@@ -106,11 +118,12 @@ class TestHealthCheck:
     @pytest.fixture(autouse=True)
     def _setup(self, browser_context):
         self.page = browser_context.new_page()
+        bootstrap_user(self.page)
         yield
         self.page.close()
 
     def test_backend_api_reachable(self):
-        resp = self.page.request.get(f"{BASE_URL.replace('5173', '7000')}/api/health")
+        resp = self.page.request.get(f"{BACKEND_URL}/api/health")
         assert resp.status == 200
         data = resp.json()
         assert data.get("status") == "ok"
@@ -122,6 +135,7 @@ class TestThemeToggle:
     @pytest.fixture(autouse=True)
     def _setup(self, browser_context):
         self.page = browser_context.new_page()
+        bootstrap_user(self.page)
         self.page.goto(BASE_URL, timeout=15000)
         self.page.wait_for_load_state("domcontentloaded")
         yield
@@ -143,6 +157,7 @@ class TestChatUI:
     @pytest.fixture(autouse=True)
     def _setup(self, browser_context):
         self.page = browser_context.new_page()
+        bootstrap_user(self.page)
         self.page.goto(BASE_URL, timeout=15000)
         self.page.wait_for_load_state("domcontentloaded")
         yield
