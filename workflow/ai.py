@@ -447,7 +447,7 @@ def llm_call(
 ) -> Optional[str]:
     """
     OpenAI / Ollama / Google Gemini 호환 LLM 호출 래퍼
-    - Gemini: google-genai(신 SDK) 우선, 없으면 google-generativeai(레거시) fallback
+    - Gemini: google-genai(신 SDK)
     - OpenAI/Ollama: /chat/completions(OpenAI 호환) 호출
     """
     if log_dir is None and logs is not None:
@@ -806,74 +806,6 @@ def llm_call(
             if meta_out is not None:
                 meta_out["sdk"] = "google-genai"
                 meta_out["error"] = meta_out.get("error") or last_err
-
-        # 1-b) Legacy SDK (google-generativeai, deprecated fallback)
-        if genai_legacy is not None:
-            last_err = ""
-            for attempt in range(max(1, retries)):
-                try:
-                    genai_legacy.configure(api_key=api_key)  # type: ignore[union-attr]
-
-                    # legacy는 구조화된 role보다 prompt 문자열 전달이 안전
-                    if system_instruction:
-                        gemini_model = genai_legacy.GenerativeModel(  # type: ignore[union-attr]
-                            model_name=str(model),
-                            system_instruction=system_instruction,
-                        )
-                    else:
-                        gemini_model = genai_legacy.GenerativeModel(  # type: ignore[union-attr]
-                            model_name=str(model),
-                        )
-
-                    safety_settings = None
-                    if HarmCategory is not None and HarmBlockThreshold is not None:
-                        safety_settings = {
-                            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                        }
-
-                    generation_config: Dict[str, Any] = {
-                        "max_output_tokens": int(num_predict),
-                        "temperature": temperature,
-                    }
-
-                    read_timeout = int(os.environ.get("LLM_READ_TIMEOUT", "600"))
-                    kwargs: Dict[str, Any] = {
-                        "generation_config": generation_config,
-                        "request_options": {"timeout": read_timeout},
-                    }
-                    if safety_settings is not None:
-                        kwargs["safety_settings"] = safety_settings
-
-                    response = gemini_model.generate_content(prompt, **kwargs)
-                    text = _extract_gemini_text(response)
-                    if log_dir:
-                        _agent_log(log_dir, "assistant", text or "")
-                    if meta_out is not None:
-                        meta_out["sdk"] = "google-generativeai"
-                        meta_out["ok"] = True
-                    return (text or "").strip() or None
-                except Exception as e:
-                    last_err = str(e)
-                    lower_err = last_err.lower()
-                    if "winerror 10013" in lower_err or "access is denied" in lower_err or "access denied" in lower_err:
-                        if log_dir:
-                            _agent_log(log_dir, "error", f"Network access denied (WinError 10013): {last_err}")
-                        if meta_out is not None:
-                            meta_out["sdk"] = "google-generativeai"
-                            meta_out["error"] = "network_denied"
-                        return None
-                    if log_dir:
-                        _agent_log(log_dir, "retry", f"Attempt {attempt+1} failed: {last_err}")
-                    _retry_sleep(attempt)
-            if log_dir:
-                _agent_log(log_dir, "error", f"Gemini(Legacy SDK) failed after retries: {last_err}")
-            if meta_out is not None:
-                meta_out["sdk"] = "google-generativeai"
-                meta_out["error"] = last_err
-            return None
 
         if log_dir:
             _agent_log(log_dir, "error", "Gemini SDK not available. Install google-genai.")
